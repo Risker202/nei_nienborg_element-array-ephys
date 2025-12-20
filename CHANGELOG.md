@@ -3,6 +3,20 @@
 Observes [Semantic Versioning](https://semver.org/spec/v2.0.0.html) standard and
  [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) convention.
 
+## [0.4.5] - 2025-09-17
+
++ Fix - Rename `env.yml` to `conda_env.yml` for consistency with other projects
++ Update - Passing tests by blackifying previous updates
+
+## [0.4.4] - 2025-06-06
+
++ Update - Update params in test/tutorial
++ Fix - Moved KiloSort's template_features  to additional_files 
+
+## [0.4.3] - 2025-06-03
+
++ Update - Use `Spikeinterface` official released versions (instead of install directly from source)
+
 ## [0.4.2] - 2025-03-25
 
 + Fix - Add key_source to `ProbeLevelReport` to filter for 'good' quality units

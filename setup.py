@@ -16,7 +16,7 @@ with open(path.join(here, pkg_name, "version.py")) as f:
 
 setup(
     name=pkg_name.replace("_", "-"),
-    python_requires=">=3.7, <3.11",
+    python_requires=">=3.7, <3.12",
     version=__version__,  # noqa F821
     description="Extracellular Array Electrophysiology DataJoint Element",
     long_description=long_description,
@@ -29,7 +29,7 @@ setup(
     packages=find_packages(exclude=["contrib", "docs", "tests*"]),
     scripts=[],
     install_requires=[
-        "datajoint>=0.13.0",
+        "datajoint>=0.14.6",
         "ipykernel>=6.0.1",
         "ipywidgets",
         "openpyxl",
