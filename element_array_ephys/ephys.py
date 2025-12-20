@@ -1052,6 +1052,13 @@ class CuratedClustering(dj.Imported):
         spike_depths=null : longblob  # (um) array of depths associated with each spike, relative to the (0, 0) of the probe    
         """
 
+    class ManualLabel(dj.Part):
+        definition = """
+        -> master.Unit
+        ---
+        manual_label: varchar(64)  # manual label for a particular unit/cluster
+        """
+        
     def make(self, key):
         """Automated population of Unit information."""
         clustering_method, output_dir = (
