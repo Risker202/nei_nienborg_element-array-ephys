@@ -399,6 +399,10 @@ class ApplyOfficialCuration(dj.Imported):
 
         clus_key = (ephys.Clustering & key).fetch1("KEY")
 
+        assert (
+            not (ephys.CuratedClustering.ManualLabel & clus_key)
+        ), "An official curation has already been applied: follow manual steps in ApplyOfficialCuration.make docstring"
+
         kilosort_dataset = kilosort.Kilosort(curation_output_dir)
 
         orig_si_unit_map = {
