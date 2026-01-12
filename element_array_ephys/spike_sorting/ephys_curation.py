@@ -122,6 +122,7 @@ class ManualCuration(dj.Manual):
         if len(ephys.CuratedClustering.Unit & key) == 0:
             logger.warning("This clustering has no units!!!")
 
+        extra_files = []
         if parent_curation_id == -1:
             assert (
                 ephys_sorter.SIExport & key
@@ -130,6 +131,13 @@ class ManualCuration(dj.Manual):
                 ephys_sorter.SIExport.File
                 & key
                 & "file_name LIKE 'phy%' AND file_name NOT LIKE '%recording.dat'"
+            )
+            extra_files += list(
+                (
+                    ephys_sorter.SIClustering.File 
+                    & key
+                    & "file_name LIKE '%KSLabel%'"
+                ).fetch('file')
             )
         else:
             assert cls & {
@@ -159,6 +167,12 @@ class ManualCuration(dj.Manual):
             f = Path(f)
             if f.name.startswith(".") and f.suffix in (".json", ".pickle"):
                 continue
+            new_f = curation_output_dir / f.name
+            if not new_f.exists() or if_exists == "overwrite":
+                shutil.copy2(f, new_f)
+
+        for f in extra_files:
+            f = Path(f)
             new_f = curation_output_dir / f.name
             if not new_f.exists() or if_exists == "overwrite":
                 shutil.copy2(f, new_f)
