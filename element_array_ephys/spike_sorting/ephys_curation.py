@@ -406,12 +406,47 @@ class ApplyOfficialCuration(dj.Imported):
         new_si_unit_reverse_map = {v: k for k, v in new_si_unit_map.items()}
 
         # Get channel and electrode-site mapping
+        # For SI-processed data, Kilosort's spike_sites contains device_channel_indices
+        # (sequential 0, 1, 2...) which may differ from the original channel_idx in
+        # EphysRecording.Channel (e.g., 32-63 for multi-insertion probes like MBA).
+        # Use the sorting_analyzer's probe to correctly map channel indices to electrodes.
         electrode_query = (ephys.EphysRecording.Channel & clus_key).proj(
             ..., "-channel_name"
         )
-        channel2electrode_map: dict[int, dict] = {
-            chn.pop("channel_idx"): chn for chn in electrode_query.fetch(as_dict=True)
-        }
+
+        # Get sorting_analyzer to access the probe's channel mapping
+        clustering_method, output_dir = (
+            ephys.ClusteringTask * ephys.ClusteringParamSet & clus_key
+        ).fetch1("clustering_method", "clustering_output_dir")
+        output_dir = find_full_path(ephys.get_ephys_root_data_dir(), output_dir)
+        sorter_name = clustering_method.replace(".", "_")
+        si_sorting_analyzer_dir = output_dir / sorter_name / "sorting_analyzer"
+
+        # If sorting_analyzer not available locally, fetch from external storage (S3)
+        if not si_sorting_analyzer_dir.exists():
+            _ = (ephys_sorter.PostProcessing.File & clus_key).fetch("file")
+
+        if si_sorting_analyzer_dir.exists():
+            import spikeinterface as si
+
+            sorting_analyzer = si.load_sorting_analyzer(folder=si_sorting_analyzer_dir)
+            # Create electrode_map keyed by electrode ID
+            electrode_map: dict[int, dict] = {
+                elec["electrode"]: elec for elec in electrode_query.fetch(as_dict=True)
+            }
+            # Map device_channel_indices to electrode info using probe's contact_ids
+            channel2electrode_map: dict[int, dict] = {
+                chn_idx: electrode_map[int(elec_id)]
+                for chn_idx, elec_id in zip(
+                    sorting_analyzer.get_probe().device_channel_indices,
+                    sorting_analyzer.get_probe().contact_ids,
+                )
+            }
+        else:
+            # Fallback for non-SI processed data - use original channel_idx
+            channel2electrode_map: dict[int, dict] = {
+                chn["channel_idx"]: chn for chn in electrode_query.fetch(as_dict=True)
+            }
 
         sample_rate = kilosort_dataset.data["params"]["sample_rate"]
         spike_times = kilosort_dataset.data["spike_times"]
