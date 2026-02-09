@@ -367,12 +367,16 @@ class ApplyOfficialCuration(dj.Imported):
         """
         from element_array_ephys.readers import kilosort
 
-        curated_files = (ManualCuration.File & key).fetch("file")
+        # Resolve full key including curation_id from OfficialCuration
+        # (key only contains Clustering PK; curation_id is a dependent attribute)
+        official_key = (OfficialCuration & key).fetch1()
+
+        curated_files = (ManualCuration.File & official_key).fetch("file")
         curation_output_dir = (
             next(Path(f) for f in curated_files if Path(f).name == "params.py")
         ).parent
 
-        curation_method = (OfficialCuration * ManualCuration & key).fetch1(
+        curation_method = (ManualCuration & official_key).fetch1(
             "curation_method"
         )
 
