@@ -435,9 +435,10 @@ class ApplyOfficialCuration(dj.Imported):
 
             sorting_analyzer = si.load_sorting_analyzer(folder=si_sorting_analyzer_dir)
             # Create electrode_map keyed by electrode ID
-            electrode_map: dict[int, dict] = {
-                elec["electrode"]: elec for elec in electrode_query.fetch(as_dict=True)
-            }
+            electrode_map: dict[int, dict] = {}
+            for elec in electrode_query.fetch(as_dict=True):
+                elec.pop("channel_idx")
+                electrode_map[elec["electrode"]] = elec
             # Map device_channel_indices to electrode info using probe's contact_ids
             channel2electrode_map: dict[int, dict] = {
                 chn_idx: electrode_map[int(elec_id)]
