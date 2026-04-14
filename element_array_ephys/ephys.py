@@ -1083,8 +1083,8 @@ class CuratedClustering(dj.Imported):
         manual_label: varchar(64)  # manual label for a particular unit/cluster
         """
 
-    def make(self, key):
-        """Automated population of Unit information."""
+    def make_fetch(self, key):
+        """Fetch clustering metadata and electrode mappings from database."""
         clustering_method, output_dir = (
             ClusteringTask * ClusteringParamSet & key
         ).fetch1("clustering_method", "clustering_output_dir")
@@ -1095,11 +1095,51 @@ class CuratedClustering(dj.Imported):
         channel2electrode_map: dict[int, dict] = {
             chn.pop("channel_idx"): chn for chn in electrode_query.fetch(as_dict=True)
         }
-        # Get sorter method and create output directory.
+
         sorter_name = clustering_method.replace(".", "_")
         si_sorting_analyzer_dir = output_dir / sorter_name / "sorting_analyzer"
+        use_spikeinterface = si_sorting_analyzer_dir.exists()
 
-        if si_sorting_analyzer_dir.exists():  # Read from spikeinterface outputs
+        # SI path: electrode map keyed by electrode ID, and sync function
+        electrode_map = None
+        ephys_sync_func = None
+        if use_spikeinterface:
+            electrode_map = {
+                elec["electrode"]: elec
+                for elec in electrode_query.fetch(as_dict=True)
+            }
+            ephys_sync_func = get_sync_ephys_function(key)
+
+        # Kilosort path: sampling rate from recording
+        sample_rate = None
+        if not use_spikeinterface:
+            _, sample_rate = (EphysRecording & key).fetch1(
+                "acq_software", "sampling_rate"
+            )
+
+        return (
+            output_dir,
+            sorter_name,
+            use_spikeinterface,
+            channel2electrode_map,
+            electrode_map,
+            ephys_sync_func,
+            sample_rate,
+        )
+
+    def make_compute(
+        self,
+        key,
+        output_dir,
+        sorter_name,
+        use_spikeinterface,
+        channel2electrode_map,
+        electrode_map,
+        ephys_sync_func,
+        sample_rate,
+    ):
+        """Load sorting outputs and compute unit properties."""
+        if use_spikeinterface:
             import spikeinterface as si
             from spikeinterface import sorters
 
@@ -1111,9 +1151,9 @@ class CuratedClustering(dj.Imported):
                 logger.info(
                     f"No units found in {sorting_file}. Skipping Unit ingestion..."
                 )
-                self.insert1(key)
-                return
+                return None
 
+            si_sorting_analyzer_dir = output_dir / sorter_name / "sorting_analyzer"
             sorting_analyzer = si.load_sorting_analyzer(folder=si_sorting_analyzer_dir)
             si_sorting = sorting_analyzer.sorting
 
@@ -1131,10 +1171,7 @@ class CuratedClustering(dj.Imported):
             spike_count_dict: dict[int, int] = si_sorting.count_num_spikes_per_unit()
             # {unit: spike_count}
 
-            # create channel2electrode_map
-            electrode_map: dict[int, dict] = {
-                elec["electrode"]: elec for elec in electrode_query.fetch(as_dict=True)
-            }
+            # Rebuild channel2electrode_map from probe's actual channel indices
             channel2electrode_map = {
                 chn_idx: electrode_map[int(elec_id)]
                 for chn_idx, elec_id in zip(
@@ -1162,8 +1199,6 @@ class CuratedClustering(dj.Imported):
                     extremum_channel_inds=extremum_channel_inds
                 )
             )
-
-            ephys_sync_func = get_sync_ephys_function(key)
 
             units = []
             for unit_idx, unit_id in enumerate(si_sorting.unit_ids):
@@ -1198,9 +1233,6 @@ class CuratedClustering(dj.Imported):
                 )
         else:  # read from kilosort outputs
             kilosort_dataset = kilosort.Kilosort(output_dir)
-            acq_software, sample_rate = (EphysRecording & key).fetch1(
-                "acq_software", "sampling_rate"
-            )
 
             sample_rate = kilosort_dataset.data["params"].get(
                 "sample_rate", sample_rate
@@ -1267,8 +1299,15 @@ class CuratedClustering(dj.Imported):
                         }
                     )
 
+        return units
+
+    def make_insert(self, key, units):
+        """Insert clustering results, batching units in groups of 64."""
         self.insert1(key)
-        self.Unit.insert(units, ignore_extra_fields=True)
+        if units is None:
+            return
+        for i in range(0, len(units), 64):
+            self.Unit.insert(units[i : i + 64], ignore_extra_fields=True)
 
 
 @schema
