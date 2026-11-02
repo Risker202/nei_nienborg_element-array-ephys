@@ -1240,7 +1240,7 @@ class CuratedClustering(dj.Imported):
                 valid_spikes_mask = ~np.isnan(spike_times)
                 spike_times = spike_times[valid_spikes_mask]
                 spike_sites = spike_sites[valid_spikes_mask]
-                spike_depths = spike_depths[valid_spikes_mask]
+                spike_depths = np.asarray(spike_depths)[valid_spikes_mask]
                 spike_count = len(spike_times)
                 n_spikes_lost = np.sum(~valid_spikes_mask)
 
